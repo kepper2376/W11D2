@@ -1,0 +1,53 @@
+#lang racket
+(require "util.rkt")
+
+; Translate the language to expressions understood by process.
+(define parse
+  (lambda (exp)
+    (cond
+      ((number? exp) (list 'num-exp (list 'num exp)))
+      ((string? exp) (list 'string-exp (list 'str exp)))
+      ((eq? exp 'True) (list 'boolean-exp 'True (void) (void)))
+      ((eq? exp 'False) (list 'boolean-exp 'False (void) (void)))
+      ((symbol? exp) (list 'var-exp exp))
+      ((null? exp) (error "PARSER ERROR: empty statement"))
+      ((eq? (car exp) 'main) (cons 'list-exp (map parse (cdr exp))))
+      ((and (= (length exp) 3) (eq? (cadr exp) '=))
+       (list 'assign-exp (list (list 'var-exp (car exp)) (parse (caddr exp)))))
+      ((and (= (length exp) 3) (is_valid_math_op (cadr exp)))
+       (list 'math-exp (cadr exp) (parse (car exp)) (parse (caddr exp))))
+      ((and (= (length exp) 3) (is_valid_boolean_op (cadr exp)))
+       (list 'boolean-exp (cadr exp) (parse (car exp)) (parse (caddr exp))))
+      ((and (= (length exp) 2) (eq? '! (car exp)))
+       (list 'boolean-exp '! (parse (cadr exp)) (void)))
+      ((eq? 'function (car exp))
+       (if (and (= (length (cadr exp)) (length (cadddr exp))) (not (null? (caddr exp))))
+           (list 'func-exp
+                 (create_pair_list '() (map parse (cadr exp)) (map parse (cadddr exp)))
+                 (cons 'list-exp (map parse (caddr exp))))
+           (error "PARSER ERROR: invalid anonymous function")))
+      ((eq? 'ask (car exp))
+       (list 'ask-exp (parse (cadr exp))
+             (cons 'list-exp (map parse (caddr exp)))
+             (cons 'list-exp (map parse (cadddr exp)))))
+      ((eq? 'while (car exp))
+       (list 'while-exp (parse (cadr exp)) (cons 'list-exp (map parse (caddr exp)))))
+      ((eq? 'do-while (car exp))
+       (list 'do-while-exp (cons 'list-exp (map parse (cadr exp))) (parse (caddr exp))))
+      ((eq? 'for (car exp))
+       (list 'for-exp
+             (cons 'list-exp (map parse (cadr exp)))
+             (parse (caddr exp))
+             (cons 'list-exp (map parse (cadddr exp)))
+             (cons 'list-exp (map parse (list-ref exp 4)))))
+      ((eq? 'fire (car exp)) (list 'fire-exp (parse (cadr exp))))
+      ((eq? 'func (car exp))
+       (list 'assign-exp
+             (list (parse (cadr exp))
+                   (list 'new-func-exp (map parse (caddr exp))
+                         (cons 'list-exp (map parse (cadddr exp)))))))
+      ((eq? 'return (car exp)) (list 'return-exp (parse (cadr exp))))
+      ((eq? 'call (car exp)) (list 'call-exp (parse (cadr exp)) (map parse (caddr exp))))
+      (else (error "PARSER ERROR: unsupported statement" exp)))))
+
+(provide (all-defined-out))
